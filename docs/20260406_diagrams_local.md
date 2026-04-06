@@ -15,6 +15,7 @@
 6. [シーケンス図: E2EE 暗号化同期](#6-シーケンス図-e2ee-暗号化同期)
 7. [シーケンス図: 同期コンフリクト解決](#7-シーケンス図-同期コンフリクト解決)
 8. [シーケンス図: PDF 出力フロー](#8-シーケンス図-pdf-出力フロー)
+9. [シーケンス図: CSV 出力フロー](#9-シーケンス図-csv-出力フロー)
 
 ---
 
@@ -278,4 +279,20 @@ sequenceDiagram
     App->>PDF: レイアウト生成 (A3横)
     PDF-->>Owner: PDFファイル保存/印刷
     Note right of PDF: サーバーへ送らずに手元で生成
+```
+
+---
+
+## 9. シーケンス図: CSV 出力フロー
+
+```mermaid
+sequenceDiagram
+    actor Owner as オーナー
+    participant App as ローカルアプリ
+
+    Owner->>App: CSV出力ボタン押下
+    App->>App: 表示中期間のシフトデータを取得
+    App->>App: UTF-8 BOM付きCSV生成
+    App-->>Owner: CSVファイル保存
+    Note right of App: Excel等で開いて加工可能
 ```
