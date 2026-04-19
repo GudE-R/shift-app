@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AvailabilityEditor } from "./AvailabilityEditor";
 import { NgDateEditor } from "./NgDateEditor";
+import { FixedSlotEditor } from "./FixedSlotEditor";
 import type { StaffWithRelations, AvailabilityStatus } from "@/types";
 
 function formatTimeInput(input: string): string {
@@ -91,6 +92,7 @@ export function StaffForm({ staff, onClose }: Props) {
             <TabsTrigger value="basic">基本情報</TabsTrigger>
             <TabsTrigger value="offdays">休み希望</TabsTrigger>
             <TabsTrigger value="assign">店舗・ポジション</TabsTrigger>
+            <TabsTrigger value="fixed">固定シフト</TabsTrigger>
           </TabsList>
 
           <TabsContent value="basic">
@@ -203,6 +205,11 @@ export function StaffForm({ staff, onClose }: Props) {
                 </div>
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="fixed">
+            {staff && <FixedSlotEditor staffId={staff.id} />}
+            {!staff && <p className="text-sm text-muted-foreground py-4">保存後に固定シフトを追加できます</p>}
           </TabsContent>
         </Tabs>
 

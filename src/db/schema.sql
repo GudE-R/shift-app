@@ -62,6 +62,16 @@ CREATE TABLE IF NOT EXISTS staff_ng_dates (
     UNIQUE(staff_id, ng_date)
 );
 
+CREATE TABLE IF NOT EXISTS staff_fixed_slots (
+    id TEXT PRIMARY KEY,
+    staff_id TEXT NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+    day_of_week INTEGER NOT NULL,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS store_requirements (
     id TEXT PRIMARY KEY,
     store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,

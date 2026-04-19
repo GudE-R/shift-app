@@ -1,5 +1,5 @@
 import type { Store, StaffWithRelations, StoreRequirement, ShiftEntry, GenerateResult } from "@/types";
-import { parseISO, getDay } from "date-fns";
+import { parseISO, getDay, eachDayOfInterval, format } from "date-fns";
 
 interface GenerateParams {
   store: Store;
@@ -90,19 +90,69 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
     s.stores.some((ss) => ss.store_id === store.id)
   );
 
+  // Pre-place fixed slots (highest priority)
+  const dates = eachDayOfInterval({ start: parseISO(dateRange.start), end: parseISO(dateRange.end) });
+  for (const date of dates) {
+    const workDate = format(date, "yyyy-MM-dd");
+    const dow = getDay(date);
+    for (const staff of eligibleStaff) {
+      for (const slot of staff.fixedSlots) {
+        if (slot.store_id !== store.id) continue;
+        if (slot.day_of_week !== dow) continue;
+        if (staff.ngDates.some((ng) => ng.ng_date === workDate)) continue;
+
+        const overlapsManual = existingManualShifts.some(
+          (ms) => ms.staff_id === staff.id && ms.work_date === workDate &&
+            timeOverlaps(ms.start_time, ms.end_time, slot.start_time, slot.end_time)
+        );
+        if (overlapsManual) continue;
+
+        // Pick position: prefer the requirement's position matching this time slot, else first assigned position
+        const matchingReq = requirements.find(
+          (r) => r.work_date === workDate && timeOverlaps(r.start_time, r.end_time, slot.start_time, slot.end_time)
+            && staff.positions.some((sp) => sp.position_id === r.position_id)
+        );
+        const positionId = matchingReq?.position_id ?? staff.positions[0]?.position_id;
+        if (!positionId) continue;
+
+        generatedShifts.push({
+          staff_id: staff.id,
+          store_id: slot.store_id,
+          position_id: positionId,
+          work_date: workDate,
+          start_time: slot.start_time,
+          end_time: slot.end_time,
+          break_time_minutes: calcBreakMinutes(slot.start_time, slot.end_time),
+          is_ai_generated: true,
+          is_manual_modified: false,
+        });
+        const duration = (toMinutes(slot.end_time) - toMinutes(slot.start_time)) / 60;
+        staffHours.set(staff.id, (staffHours.get(staff.id) || 0) + duration);
+      }
+    }
+  }
+
   // Process each requirement slot
   for (const req of requirements) {
     const dayOfWeek = getDay(parseISO(req.work_date));
     let assigned = 0;
 
-    // Check how many manual shifts already cover this slot
-    const manualCovering = existingManualShifts.filter(
-      (ms) =>
-        ms.work_date === req.work_date &&
-        ms.position_id === req.position_id &&
-        timeOverlaps(ms.start_time, ms.end_time, req.start_time, req.end_time)
-    );
-    const neededCount = Math.max(0, req.count - manualCovering.length);
+    // Check how many shifts (manual + already-placed fixed slots) cover this slot
+    const alreadyCovering = [
+      ...existingManualShifts.filter(
+        (ms) =>
+          ms.work_date === req.work_date &&
+          ms.position_id === req.position_id &&
+          timeOverlaps(ms.start_time, ms.end_time, req.start_time, req.end_time)
+      ),
+      ...generatedShifts.filter(
+        (gs) =>
+          gs.work_date === req.work_date &&
+          gs.position_id === req.position_id &&
+          timeOverlaps(gs.start_time, gs.end_time, req.start_time, req.end_time)
+      ),
+    ];
+    const neededCount = Math.max(0, req.count - alreadyCovering.length);
     if (neededCount === 0) continue;
 
     // Find candidates for this slot

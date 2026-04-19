@@ -1,5 +1,5 @@
 import { getDb } from "../database";
-import type { Staff, StaffStore, StaffPosition, StaffAvailability, StaffNgDate, StaffWithRelations } from "@/types";
+import type { Staff, StaffStore, StaffPosition, StaffAvailability, StaffNgDate, StaffFixedSlot, StaffWithRelations } from "@/types";
 
 export async function getStaffList(): Promise<Staff[]> {
   const db = await getDb();
@@ -13,6 +13,7 @@ export async function getAllStaffWithRelations(): Promise<StaffWithRelations[]> 
   const allPositions: StaffPosition[] = await db.select("SELECT * FROM staff_positions");
   const allAvailability: StaffAvailability[] = await db.select("SELECT * FROM staff_availability");
   const allNgDates: StaffNgDate[] = await db.select("SELECT * FROM staff_ng_dates");
+  const allFixedSlots: StaffFixedSlot[] = await db.select("SELECT * FROM staff_fixed_slots");
 
   return staffList.map((s) => ({
     ...s,
@@ -20,6 +21,7 @@ export async function getAllStaffWithRelations(): Promise<StaffWithRelations[]> 
     positions: allPositions.filter((sp) => sp.staff_id === s.id),
     availability: allAvailability.filter((sa) => sa.staff_id === s.id),
     ngDates: allNgDates.filter((ng) => ng.staff_id === s.id),
+    fixedSlots: allFixedSlots.filter((fs) => fs.staff_id === s.id),
   }));
 }
 
@@ -109,4 +111,19 @@ export async function addStaffNgDate(ngDate: Omit<StaffNgDate, "updated_at">): P
 export async function deleteStaffNgDate(id: string): Promise<void> {
   const db = await getDb();
   await db.execute("DELETE FROM staff_ng_dates WHERE id = $1", [id]);
+}
+
+// Fixed Slots
+export async function addStaffFixedSlot(slot: Omit<StaffFixedSlot, "updated_at">): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO staff_fixed_slots (id, staff_id, day_of_week, store_id, start_time, end_time)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [slot.id, slot.staff_id, slot.day_of_week, slot.store_id, slot.start_time, slot.end_time]
+  );
+}
+
+export async function deleteStaffFixedSlot(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute("DELETE FROM staff_fixed_slots WHERE id = $1", [id]);
 }

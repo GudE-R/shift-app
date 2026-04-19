@@ -65,6 +65,16 @@ export interface StaffNgDate {
   updated_at: string;
 }
 
+export interface StaffFixedSlot {
+  id: string;
+  staff_id: string;
+  day_of_week: number; // 0=Sun, 6=Sat
+  store_id: string;
+  start_time: string; // HH:mm
+  end_time: string; // HH:mm
+  updated_at: string;
+}
+
 export interface StoreRequirement {
   id: string;
   store_id: string;
@@ -118,6 +128,7 @@ export interface StaffWithRelations extends Staff {
   positions: StaffPosition[];
   availability: StaffAvailability[];
   ngDates: StaffNgDate[];
+  fixedSlots: StaffFixedSlot[];
 }
 
 export interface ShiftEntryWithNames extends ShiftEntry {

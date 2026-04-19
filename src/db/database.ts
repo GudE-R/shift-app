@@ -24,6 +24,28 @@ async function initSchema(database: Database) {
   }
 
   await migrateStaffBaseShift(database);
+  await migrateStaffFixedSlotsDropPosition(database);
+}
+
+async function migrateStaffFixedSlotsDropPosition(database: Database) {
+  const cols: { name: string }[] = await database.select("PRAGMA table_info(staff_fixed_slots)");
+  if (cols.length === 0) return;
+  if (!cols.some((c) => c.name === "position_id")) return;
+  await database.execute(`CREATE TABLE staff_fixed_slots_new (
+    id TEXT PRIMARY KEY,
+    staff_id TEXT NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+    day_of_week INTEGER NOT NULL,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`);
+  await database.execute(
+    "INSERT INTO staff_fixed_slots_new (id, staff_id, day_of_week, store_id, start_time, end_time, updated_at) " +
+    "SELECT id, staff_id, day_of_week, store_id, start_time, end_time, updated_at FROM staff_fixed_slots"
+  );
+  await database.execute("DROP TABLE staff_fixed_slots");
+  await database.execute("ALTER TABLE staff_fixed_slots_new RENAME TO staff_fixed_slots");
 }
 
 async function migrateStaffBaseShift(database: Database) {
@@ -100,6 +122,16 @@ CREATE TABLE IF NOT EXISTS staff_ng_dates (
     reason TEXT,
     updated_at TEXT DEFAULT (datetime('now')),
     UNIQUE(staff_id, ng_date)
+);
+
+CREATE TABLE IF NOT EXISTS staff_fixed_slots (
+    id TEXT PRIMARY KEY,
+    staff_id TEXT NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+    day_of_week INTEGER NOT NULL,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS store_requirements (

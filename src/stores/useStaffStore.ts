@@ -14,6 +14,8 @@ interface StaffState {
   setStaffAvailability: (staffId: string, availability: { day_of_week: number; status: string }[]) => Promise<void>;
   addNgDate: (staffId: string, date: string, reason?: string) => Promise<void>;
   removeNgDate: (id: string) => Promise<void>;
+  addFixedSlot: (slot: { staff_id: string; day_of_week: number; store_id: string; start_time: string; end_time: string }) => Promise<void>;
+  removeFixedSlot: (id: string) => Promise<void>;
 }
 
 export const useStaffStore = create<StaffState>((set, get) => ({
@@ -68,6 +70,16 @@ export const useStaffStore = create<StaffState>((set, get) => ({
 
   removeNgDate: async (id) => {
     await staffQueries.deleteStaffNgDate(id);
+    await get().fetchStaff();
+  },
+
+  addFixedSlot: async (slot) => {
+    await staffQueries.addStaffFixedSlot({ id: crypto.randomUUID(), ...slot });
+    await get().fetchStaff();
+  },
+
+  removeFixedSlot: async (id) => {
+    await staffQueries.deleteStaffFixedSlot(id);
     await get().fetchStaff();
   },
 }));
