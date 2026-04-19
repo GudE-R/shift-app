@@ -25,12 +25,13 @@ export interface Staff {
   display_name: string;
   anonymous_id: string;
   status: "active" | "inactive";
-  night_shift_ok: boolean;
   target_hours: number | null;
   min_hours: number | null;
   max_hours: number | null;
   max_consecutive_days: number | null;
   memo: string | null;
+  default_start_time: string | null;
+  default_end_time: string | null;
   updated_at: string;
 }
 

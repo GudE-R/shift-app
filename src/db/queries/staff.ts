@@ -16,7 +16,6 @@ export async function getAllStaffWithRelations(): Promise<StaffWithRelations[]> 
 
   return staffList.map((s) => ({
     ...s,
-    night_shift_ok: Boolean(s.night_shift_ok),
     stores: allStores.filter((ss) => ss.staff_id === s.id),
     positions: allPositions.filter((sp) => sp.staff_id === s.id),
     availability: allAvailability.filter((sa) => sa.staff_id === s.id),
@@ -27,10 +26,11 @@ export async function getAllStaffWithRelations(): Promise<StaffWithRelations[]> 
 export async function createStaff(staff: Omit<Staff, "updated_at">): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `INSERT INTO staff (id, display_name, anonymous_id, status, night_shift_ok, target_hours, min_hours, max_hours, max_consecutive_days, memo)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-    [staff.id, staff.display_name, staff.anonymous_id, staff.status, staff.night_shift_ok ? 1 : 0,
-     staff.target_hours, staff.min_hours, staff.max_hours, staff.max_consecutive_days, staff.memo]
+    `INSERT INTO staff (id, display_name, anonymous_id, status, target_hours, min_hours, max_hours, max_consecutive_days, memo, default_start_time, default_end_time)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [staff.id, staff.display_name, staff.anonymous_id, staff.status,
+     staff.target_hours, staff.min_hours, staff.max_hours, staff.max_consecutive_days, staff.memo,
+     staff.default_start_time, staff.default_end_time]
   );
 }
 
@@ -41,13 +41,14 @@ export async function updateStaff(id: string, data: Partial<Staff>): Promise<voi
   let idx = 1;
 
   if (data.display_name !== undefined) { fields.push(`display_name = $${idx++}`); values.push(data.display_name); }
-  if (data.night_shift_ok !== undefined) { fields.push(`night_shift_ok = $${idx++}`); values.push(data.night_shift_ok ? 1 : 0); }
   if (data.target_hours !== undefined) { fields.push(`target_hours = $${idx++}`); values.push(data.target_hours); }
   if (data.min_hours !== undefined) { fields.push(`min_hours = $${idx++}`); values.push(data.min_hours); }
   if (data.max_hours !== undefined) { fields.push(`max_hours = $${idx++}`); values.push(data.max_hours); }
   if (data.max_consecutive_days !== undefined) { fields.push(`max_consecutive_days = $${idx++}`); values.push(data.max_consecutive_days); }
   if (data.memo !== undefined) { fields.push(`memo = $${idx++}`); values.push(data.memo); }
   if (data.status !== undefined) { fields.push(`status = $${idx++}`); values.push(data.status); }
+  if (data.default_start_time !== undefined) { fields.push(`default_start_time = $${idx++}`); values.push(data.default_start_time); }
+  if (data.default_end_time !== undefined) { fields.push(`default_end_time = $${idx++}`); values.push(data.default_end_time); }
 
   if (fields.length === 0) return;
   fields.push(`updated_at = datetime('now')`);

@@ -29,6 +29,50 @@ function toMinutes(time: string): number {
   return h * 60 + m;
 }
 
+function toHHMM(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function extendShiftsForUnderstaffedSlots(
+  generatedShifts: Omit<ShiftEntry, "id" | "updated_at">[],
+  requirements: StoreRequirement[],
+  existingManualShifts: ShiftEntry[]
+) {
+  for (const req of requirements) {
+    const covering = [
+      ...generatedShifts.filter(
+        (s) => s.work_date === req.work_date && s.position_id === req.position_id &&
+          timeOverlaps(s.start_time, s.end_time, req.start_time, req.end_time)
+      ),
+      ...existingManualShifts.filter(
+        (s) => s.work_date === req.work_date && s.position_id === req.position_id &&
+          timeOverlaps(s.start_time, s.end_time, req.start_time, req.end_time)
+      ),
+    ];
+    if (covering.length >= req.count) continue;
+
+    // Try extending end times of adjacent generated shifts to cover the slot
+    const reqEnd = toMinutes(req.end_time);
+    const extendable = generatedShifts
+      .filter(
+        (s) =>
+          s.work_date === req.work_date &&
+          s.position_id === req.position_id &&
+          toMinutes(s.end_time) < reqEnd &&
+          toMinutes(s.end_time) >= toMinutes(req.start_time)
+      )
+      .sort((a, b) => toMinutes(b.end_time) - toMinutes(a.end_time));
+
+    const shortage = req.count - covering.length;
+    for (let i = 0; i < Math.min(shortage, extendable.length); i++) {
+      extendable[i].end_time = toHHMM(reqEnd);
+      extendable[i].break_time_minutes = calcBreakMinutes(extendable[i].start_time, extendable[i].end_time);
+    }
+  }
+}
+
 export async function generateMockShifts(params: GenerateParams): Promise<GenerateResult> {
   const { store, staffList, requirements, existingManualShifts, dateRange } = params;
 
@@ -74,13 +118,6 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
         const avail = staff.availability.find((a) => a.day_of_week === dayOfWeek);
         if (avail?.status === "×") return false;
 
-        // Check night shift
-        if (!staff.night_shift_ok) {
-          const startH = parseInt(req.start_time.split(":")[0]);
-          const endH = parseInt(req.end_time.split(":")[0]);
-          if (startH >= 22 || endH <= 5 || endH >= 22) return false;
-        }
-
         // Check if already assigned at overlapping time on this date
         const alreadyAssigned = [
           ...generatedShifts.filter((gs) => gs.staff_id === staff.id && gs.work_date === req.work_date),
@@ -110,16 +147,31 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
     // Assign top N candidates
     for (let i = 0; i < Math.min(neededCount, candidates.length); i++) {
       const staff = candidates[i];
-      const breakMin = calcBreakMinutes(req.start_time, req.end_time);
-      const shiftDuration = (toMinutes(req.end_time) - toMinutes(req.start_time)) / 60;
+
+      // Use base shift if set (must cover the requirement slot)
+      let startTime = req.start_time;
+      let endTime = req.end_time;
+      if (staff.default_start_time && staff.default_end_time) {
+        const baseStart = toMinutes(staff.default_start_time);
+        const baseEnd = toMinutes(staff.default_end_time);
+        const reqStart = toMinutes(req.start_time);
+        const reqEnd = toMinutes(req.end_time);
+        if (baseStart <= reqStart && baseEnd >= reqEnd) {
+          startTime = staff.default_start_time;
+          endTime = staff.default_end_time;
+        }
+      }
+
+      const breakMin = calcBreakMinutes(startTime, endTime);
+      const shiftDuration = (toMinutes(endTime) - toMinutes(startTime)) / 60;
 
       generatedShifts.push({
         staff_id: staff.id,
         store_id: store.id,
         position_id: req.position_id,
         work_date: req.work_date,
-        start_time: req.start_time,
-        end_time: req.end_time,
+        start_time: startTime,
+        end_time: endTime,
         break_time_minutes: breakMin,
         is_ai_generated: true,
         is_manual_modified: false,
@@ -137,6 +189,8 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
       });
     }
   }
+
+  extendShiftsForUnderstaffedSlots(generatedShifts, requirements, existingManualShifts);
 
   // Add id to each shift
   const shiftsWithId = generatedShifts.map((s) => ({

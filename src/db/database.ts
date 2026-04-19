@@ -22,6 +22,19 @@ async function initSchema(database: Database) {
   for (const stmt of statements) {
     await database.execute(stmt);
   }
+
+  await migrateStaffBaseShift(database);
+}
+
+async function migrateStaffBaseShift(database: Database) {
+  const cols: { name: string }[] = await database.select("PRAGMA table_info(staff)");
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has("default_start_time")) {
+    await database.execute("ALTER TABLE staff ADD COLUMN default_start_time TEXT");
+  }
+  if (!names.has("default_end_time")) {
+    await database.execute("ALTER TABLE staff ADD COLUMN default_end_time TEXT");
+  }
 }
 
 const SCHEMA = `
@@ -52,6 +65,8 @@ CREATE TABLE IF NOT EXISTS staff (
     max_hours REAL,
     max_consecutive_days INTEGER,
     memo TEXT,
+    default_start_time TEXT,
+    default_end_time TEXT,
     updated_at TEXT DEFAULT (datetime('now'))
 );
 

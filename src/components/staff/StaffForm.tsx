@@ -12,6 +12,12 @@ import { AvailabilityEditor } from "./AvailabilityEditor";
 import { NgDateEditor } from "./NgDateEditor";
 import type { StaffWithRelations, AvailabilityStatus } from "@/types";
 
+function formatTimeInput(input: string): string {
+  const digits = input.replace(/\D/g, "").slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return digits.slice(0, 2) + ":" + digits.slice(2);
+}
+
 interface Props {
   staff: StaffWithRelations | null;
   onClose: () => void;
@@ -23,7 +29,8 @@ export function StaffForm({ staff, onClose }: Props) {
   const [tab, setTab] = useState("basic");
 
   const [name, setName] = useState(staff?.display_name || "");
-  const [nightShiftOk, setNightShiftOk] = useState(staff?.night_shift_ok ?? true);
+  const [defaultStartTime, setDefaultStartTime] = useState(staff?.default_start_time || "");
+  const [defaultEndTime, setDefaultEndTime] = useState(staff?.default_end_time || "");
   const [targetHours, setTargetHours] = useState(staff?.target_hours?.toString() || "");
   const [minHours, setMinHours] = useState(staff?.min_hours?.toString() || "");
   const [maxHours, setMaxHours] = useState(staff?.max_hours?.toString() || "");
@@ -50,12 +57,13 @@ export function StaffForm({ staff, onClose }: Props) {
       display_name: name,
       anonymous_id: staff?.anonymous_id || `staff_${id.slice(0, 8)}`,
       status: "active" as const,
-      night_shift_ok: nightShiftOk,
       target_hours: targetHours ? parseFloat(targetHours) : null,
       min_hours: minHours ? parseFloat(minHours) : null,
       max_hours: maxHours ? parseFloat(maxHours) : null,
       max_consecutive_days: maxConsecutive ? parseInt(maxConsecutive) : null,
       memo: memo || null,
+      default_start_time: defaultStartTime || null,
+      default_end_time: defaultEndTime || null,
     };
 
     if (staff) {
@@ -81,8 +89,7 @@ export function StaffForm({ staff, onClose }: Props) {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
             <TabsTrigger value="basic">基本情報</TabsTrigger>
-            <TabsTrigger value="availability">曜日別可否</TabsTrigger>
-            <TabsTrigger value="ngdates">NG日</TabsTrigger>
+            <TabsTrigger value="offdays">休み希望</TabsTrigger>
             <TabsTrigger value="assign">店舗・ポジション</TabsTrigger>
           </TabsList>
 
@@ -110,9 +117,30 @@ export function StaffForm({ staff, onClose }: Props) {
                 <Label>連続勤務上限(日)</Label>
                 <Input type="number" value={maxConsecutive} onChange={(e) => setMaxConsecutive(e.target.value)} placeholder="未設定=5日" className="w-32" />
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox checked={nightShiftOk} onCheckedChange={setNightShiftOk} />
-                <Label>夜勤OK（22:00-翌5:00）</Label>
+              <div>
+                <Label className="mb-2 block">基準シフト</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="09:00"
+                    maxLength={5}
+                    value={defaultStartTime}
+                    onChange={(e) => setDefaultStartTime(formatTimeInput(e.target.value))}
+                    className="w-24"
+                  />
+                  <span className="text-sm text-muted-foreground">〜</span>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="17:00"
+                    maxLength={5}
+                    value={defaultEndTime}
+                    onChange={(e) => setDefaultEndTime(formatTimeInput(e.target.value))}
+                    className="w-24"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">4桁で入力すると自動整形（例: 0730 → 07:30）</p>
               </div>
               <div>
                 <Label>メモ</Label>
@@ -121,13 +149,18 @@ export function StaffForm({ staff, onClose }: Props) {
             </div>
           </TabsContent>
 
-          <TabsContent value="availability">
-            <AvailabilityEditor value={availability} onChange={setAvailability} />
-          </TabsContent>
-
-          <TabsContent value="ngdates">
-            {staff && <NgDateEditor staffId={staff.id} />}
-            {!staff && <p className="text-sm text-muted-foreground py-4">保存後にNG日を追加できます</p>}
+          <TabsContent value="offdays">
+            <div className="space-y-6">
+              <div>
+                <Label className="mb-2 block text-sm font-medium">曜日別可否</Label>
+                <AvailabilityEditor value={availability} onChange={setAvailability} />
+              </div>
+              <div>
+                <Label className="mb-2 block text-sm font-medium">休暇希望日（個別）</Label>
+                {staff && <NgDateEditor staffId={staff.id} />}
+                {!staff && <p className="text-sm text-muted-foreground py-4">保存後に休暇希望日を追加できます</p>}
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="assign">

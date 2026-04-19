@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS staff (
     max_hours REAL,
     max_consecutive_days INTEGER,
     memo TEXT,
+    default_start_time TEXT,
+    default_end_time TEXT,
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
