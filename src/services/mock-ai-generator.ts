@@ -1,4 +1,5 @@
 import type { Store, StaffWithRelations, StoreRequirement, ShiftEntry, GenerateResult } from "@/types";
+import type { GenerationDirective } from "./ai/types";
 import { parseISO, getDay, eachDayOfInterval, format } from "date-fns";
 
 interface GenerateParams {
@@ -7,6 +8,8 @@ interface GenerateParams {
   requirements: StoreRequirement[];
   existingManualShifts: ShiftEntry[];
   dateRange: { start: string; end: string };
+  // AIアシスタントが解釈した一時的なソフト指示。未指定なら従来挙動と完全に同一。
+  directives?: GenerationDirective[];
 }
 
 function calcBreakMinutes(startTime: string, endTime: string): number {
@@ -74,7 +77,7 @@ function extendShiftsForUnderstaffedSlots(
 }
 
 export async function generateMockShifts(params: GenerateParams): Promise<GenerateResult> {
-  const { store, staffList, requirements, existingManualShifts, dateRange } = params;
+  const { store, staffList, requirements, existingManualShifts, dateRange, directives = [] } = params;
 
   // Simulate processing delay
   await new Promise((r) => setTimeout(r, 1000));
@@ -84,6 +87,23 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
 
   // Track hours assigned to each staff during this generation
   const staffHours = new Map<string, number>();
+  // Track shift COUNT per staff (for staff_shift_cap directive)
+  const staffShiftCount = new Map<string, number>();
+
+  // Pre-compute directive lookups (no directives => all neutral => 従来挙動)
+  const weekendExtra = directives
+    .filter((d): d is Extract<GenerationDirective, { kind: "weekend_heavy" }> => d.kind === "weekend_heavy")
+    .reduce((sum, d) => sum + d.extra, 0);
+  const reduceLaborCost = directives.some((d) => d.kind === "reduce_labor_cost");
+  const shiftCaps = new Map(
+    directives.filter((d) => d.kind === "staff_shift_cap").map((d: any) => [d.staffId, d.max])
+  );
+  const preferredStaff = new Set(
+    directives.filter((d) => d.kind === "prefer_staff").map((d: any) => d.staffId)
+  );
+  const avoidStaffOn = new Set(
+    directives.filter((d) => d.kind === "avoid_staff_on").map((d: any) => `${d.staffId}|${d.date}`)
+  );
 
   // Get eligible staff for this store
   const eligibleStaff = staffList.filter((s) =>
@@ -128,6 +148,7 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
         });
         const duration = (toMinutes(slot.end_time) - toMinutes(slot.start_time)) / 60;
         staffHours.set(staff.id, (staffHours.get(staff.id) || 0) + duration);
+        staffShiftCount.set(staff.id, (staffShiftCount.get(staff.id) || 0) + 1);
       }
     }
   }
@@ -152,7 +173,10 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
           timeOverlaps(gs.start_time, gs.end_time, req.start_time, req.end_time)
       ),
     ];
-    const neededCount = Math.max(0, req.count - alreadyCovering.length);
+    // weekend_heavy: 土日は必要人数を増やす
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const effectiveCount = req.count + (isWeekend ? weekendExtra : 0);
+    const neededCount = Math.max(0, effectiveCount - alreadyCovering.length);
     if (neededCount === 0) continue;
 
     // Find candidates for this slot
@@ -163,6 +187,13 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
 
         // Check NG dates
         if (staff.ngDates.some((ng) => ng.ng_date === req.work_date)) return false;
+
+        // avoid_staff_on: この日だけ除外
+        if (avoidStaffOn.has(`${staff.id}|${req.work_date}`)) return false;
+
+        // staff_shift_cap: 総シフト数の上限に達していたら除外
+        const cap = shiftCaps.get(staff.id);
+        if (cap !== undefined && (staffShiftCount.get(staff.id) || 0) >= cap) return false;
 
         // Check availability
         const avail = staff.availability.find((a) => a.day_of_week === dayOfWeek);
@@ -180,6 +211,11 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
         return true;
       })
       .sort((a, b) => {
+        // prefer_staff: 指定スタッフを最優先
+        const aPref = preferredStaff.has(a.id) ? 1 : 0;
+        const bPref = preferredStaff.has(b.id) ? 1 : 0;
+        if (aPref !== bPref) return bPref - aPref;
+
         // Prefer staff with fewer hours assigned (balance workload)
         const aHours = staffHours.get(a.id) || 0;
         const bHours = staffHours.get(b.id) || 0;
@@ -199,9 +235,10 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
       const staff = candidates[i];
 
       // Use base shift if set (must cover the requirement slot)
+      // reduce_labor_cost: 既定時間への延長をやめ、必要枠ぴったりに割り当てる
       let startTime = req.start_time;
       let endTime = req.end_time;
-      if (staff.default_start_time && staff.default_end_time) {
+      if (!reduceLaborCost && staff.default_start_time && staff.default_end_time) {
         const baseStart = toMinutes(staff.default_start_time);
         const baseEnd = toMinutes(staff.default_end_time);
         const reqStart = toMinutes(req.start_time);
@@ -228,6 +265,7 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
       });
 
       staffHours.set(staff.id, (staffHours.get(staff.id) || 0) + shiftDuration);
+      staffShiftCount.set(staff.id, (staffShiftCount.get(staff.id) || 0) + 1);
       assigned++;
     }
 
@@ -240,7 +278,10 @@ export async function generateMockShifts(params: GenerateParams): Promise<Genera
     }
   }
 
-  extendShiftsForUnderstaffedSlots(generatedShifts, requirements, existingManualShifts);
+  // reduce_labor_cost 時はシフト延長による穴埋めもしない（総労働時間を抑える）
+  if (!reduceLaborCost) {
+    extendShiftsForUnderstaffedSlots(generatedShifts, requirements, existingManualShifts);
+  }
 
   // Add id to each shift
   const shiftsWithId = generatedShifts.map((s) => ({

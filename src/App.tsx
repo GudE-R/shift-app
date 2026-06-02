@@ -5,6 +5,7 @@ import { StoreListPage } from "./components/stores/StoreListPage";
 import { StaffListPage } from "./components/staff/StaffListPage";
 import { RequirementsPage } from "./components/requirements/RequirementsPage";
 import { CalendarPage } from "./components/calendar/CalendarPage";
+import { AiSettingsPanel } from "./components/ai/AiSettingsPanel";
 import { PasswordScreen } from "./components/auth/PasswordScreen";
 import { useAuthStore } from "./stores/useAuthStore";
 
@@ -24,6 +25,7 @@ function App() {
           <Route path="/staff" element={<StaffListPage />} />
           <Route path="/requirements" element={<RequirementsPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/settings" element={<AiSettingsPanel />} />
         </Route>
       </Routes>
     </BrowserRouter>

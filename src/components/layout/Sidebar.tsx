@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Store, Users, ClipboardList, Calendar } from "lucide-react";
+import { LayoutDashboard, Store, Users, ClipboardList, Calendar, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -8,6 +8,7 @@ const navItems = [
   { to: "/staff", icon: Users, label: "スタッフ管理" },
   { to: "/requirements", icon: ClipboardList, label: "必要人員設定" },
   { to: "/calendar", icon: Calendar, label: "シフトカレンダー" },
+  { to: "/settings", icon: Settings, label: "設定" },
 ];
 
 export function Sidebar() {

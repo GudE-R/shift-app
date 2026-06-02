@@ -13,6 +13,13 @@
     "dialog:allow-open",
     "fs:default",
     "fs:allow-write-text-file",
-    "store:default"
+    "store:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.anthropic.com/*" },
+        { "url": "https://generativelanguage.googleapis.com/*" }
+      ]
+    }
   ]
 }

@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCalendarStore } from "@/stores/useCalendarStore";
 import { useShiftStore } from "@/stores/useShiftStore";
 import { useStaffStore } from "@/stores/useStaffStore";
 import { useStoreStore } from "@/stores/useStoreStore";
+import { useAiStore } from "@/stores/useAiStore";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, Loader2, Wand2 } from "lucide-react";
 import { generateMockShifts } from "@/services/mock-ai-generator";
 import { getRequirements } from "@/db/queries/store-requirements";
+import { AiAssistantDialog } from "@/components/ai/AiAssistantDialog";
+import type { GenerationDirective } from "@/services/ai/types";
 
 interface Props {
   onGenerated: () => void;
@@ -15,13 +18,19 @@ interface Props {
 export function GenerateButton({ onGenerated }: Props) {
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<{ shifts: number; warnings: number } | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const { selectedStoreId, getDateRange } = useCalendarStore();
   const { shifts, deleteNonManualShifts, bulkInsertShifts } = useShiftStore();
   const { staffList } = useStaffStore();
   const { stores } = useStoreStore();
+  const { initialized, init, isReady } = useAiStore();
 
-  const handleGenerate = async () => {
+  useEffect(() => {
+    if (!initialized) init();
+  }, [initialized, init]);
+
+  const runGeneration = async (directives?: GenerationDirective[]) => {
     if (!selectedStoreId) {
       alert("生成する店舗を選択してください");
       return;
@@ -44,6 +53,7 @@ export function GenerateButton({ onGenerated }: Props) {
         requirements,
         existingManualShifts: manualShifts,
         dateRange: range,
+        directives,
       });
 
       await deleteNonManualShifts(selectedStoreId, range.start, range.end);
@@ -59,16 +69,37 @@ export function GenerateButton({ onGenerated }: Props) {
     }
   };
 
+  const selectedStore = stores.find((s) => s.id === selectedStoreId);
+  const aiReady = isReady();
+
   return (
     <div className="flex items-center gap-2">
-      <Button onClick={handleGenerate} disabled={generating || !selectedStoreId}>
+      <Button onClick={() => runGeneration()} disabled={generating || !selectedStoreId}>
         {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
         AI生成
       </Button>
+
+      {aiReady && (
+        <Button variant="outline" onClick={() => setAiOpen(true)} disabled={generating || !selectedStoreId}>
+          <Wand2 className="h-4 w-4 mr-2" />
+          AIで指示
+        </Button>
+      )}
+
       {result && (
         <span className="text-xs text-muted-foreground">
           {result.shifts}件生成 / 警告{result.warnings}件
         </span>
+      )}
+
+      {selectedStore && (
+        <AiAssistantDialog
+          open={aiOpen}
+          onClose={() => setAiOpen(false)}
+          store={selectedStore}
+          dateRange={getDateRange()}
+          onGenerate={(directives) => runGeneration(directives)}
+        />
       )}
     </div>
   );
